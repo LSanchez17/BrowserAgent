@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  browser-agent:
+    build: .
+    container_name: browser-agent-service
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - MODEL=qwen3:8b
+      - HEADLESS=True
+    restart: unless-stopped
+    networks:
+      - browser-agent-network
+    depends_on:
+      - ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  browser-agent-network:
+    driver: bridge
+
+volumes:
+  ollama-data:

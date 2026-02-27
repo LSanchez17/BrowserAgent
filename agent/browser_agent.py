@@ -119,3 +119,60 @@ class BrowserAgent:
             'description': description,
             'text_preview': text_preview[:500]
         }
+    
+    async def execute_task(self, url: str, task: str) -> Dict[str, Any]:
+        """Execute a task on a webpage.
+        
+        Args:
+            url: URL to visit
+            task: Description of what to do on the page
+            
+        Returns:
+            Dict with task results, URL, title, and execution details
+        """
+        print(f"\n🌐 Opening: {url}")
+        print(f"📋 Task: {task}")
+        
+        # Navigate to URL
+        await self.page.goto(url, timeout=30000)
+        await self.page.wait_for_load_state("networkidle")
+        await asyncio.sleep(1)
+        
+        # Get page info
+        title = await self.page.title()
+        text = await self.page.evaluate('() => document.body.innerText')
+        text_preview = text[:2000] if text else ""
+        
+        print(f"📄 Page Title: {title}")
+        
+        # Ask LLM to execute the task
+        prompt = f"""You are a browser automation assistant. A user wants you to perform a task on a webpage.
+
+Page Title: {title}
+URL: {url}
+
+Page Content:
+{text_preview}
+
+User's Task: {task}
+
+Based on the page content above, provide:
+1. What you observe on the page that's relevant to the task
+2. What actions would be needed to complete this task
+3. Any data or results from analyzing the page content
+
+Respond in a clear, structured way."""
+
+        result = await self.ask_llm(prompt)
+        
+        print(f"\n💭 Task Result:")
+        print(f"   {result}")
+        
+        return {
+            'url': self.page.url,
+            'title': title,
+            'task': task,
+            'result': result,
+            'text_preview': text_preview[:500],
+            'status': 'completed'
+        }

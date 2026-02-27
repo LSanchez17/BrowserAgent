@@ -2,8 +2,7 @@ import asyncio
 import argparse
 import json
 
-from agents.browser_agent import BrowserAgent
-
+from agent.browser_agent import BrowserAgent
 
 async def main():
     """Main entry point."""
