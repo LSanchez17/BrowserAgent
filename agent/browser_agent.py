@@ -1,5 +1,5 @@
 """
-Simple browser agent that opens a URL and describes what it sees using Ollama.
+Simple browser agent that opens a URL and interacts with it using a combination of Ollama and Playwright.
 """
 import asyncio
 import ollama
@@ -9,7 +9,7 @@ from playwright.async_api import async_playwright, Page, Browser
 
 
 class BrowserAgent:
-    """Simple browser agent that describes web pages."""
+    """Simple browser agent that can interact with web pages."""
     
     def __init__(
         self,

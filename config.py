@@ -11,6 +11,9 @@ class Settings:
     # Browser Configuration
     HEADLESS: bool = os.getenv("HEADLESS", "True").lower() == "true"
     
+    # Redis Configuration
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
+    
     # Service Configuration
     HOST: str = os.getenv("HOST", "0.0.0.0")
     PORT: int = int(os.getenv("PORT", "8000"))

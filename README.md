@@ -1,107 +1,87 @@
 # Browser Agent - LLM-Powered Browser Automation
 
-A minimal LLM-powered browser agent that can be used as a CLI tool or deployed as a microservice.
+A lightweight, LLM-powered browser agent now implemented as a FastAPI microservice with optional CLI helpers. The service uses Playwright for browser automation, Ollama as the local LLM backend, and Redis for task state when running asynchronously (webhooks).
 
-## 🏗️ Structure
+## 🏗️ Current Structure
 
 ```
 BrowserAgent/
-├── run.py                    # CLI entry point
-├── service.py                # FastAPI microservice
-├── agents/
-│   └── browser_agent.py      # Browser agent core
-├── requirements.txt          # Dependencies
-├── Dockerfile                # Container image
-└── docker-compose.yml        # Multi-container setup
+├── main.py                   # FastAPI application (endpoints + lifespan)
+├── run.py                    # CLI entry point (legacy/CLI)
+├── config.py                 # Settings
+├── requirements.txt
+├── Dockerfile
+├── docker-compose.yml
+├── dependencies.py           # App dependencies (Redis lifecycle)
+├── agent/
+│   └── browser_agent.py      # Browser automation core
+├── services/
+│   └── task_manager.py       # Business logic and task persistence
+├── routes/
+│   └── tasks_controller.py   # Task-related routes (moved from main)
+├── schemas/
+│   └── schemas.py            # Pydantic v2 request/response models
+├── aliases/
+│   └── global_aliases.py     # Common dependency aliases
+└── README.md
 ```
 
 ## 🎯 What It Does
 
-1. Opens a URL with Playwright
-2. Extracts page title and text content
-3. Uses local Ollama LLM to analyze and execute tasks
-4. Returns structured results
+1. Opens a URL with Playwright and extracts page content
+2. Uses Ollama LLM to analyze/execute tasks
+3. Returns structured results synchronously or via webhook (async)
+4. Persists task state in Redis with a TTL for asynchronous tasks
 
-Available as both a CLI tool and a microservice with async webhook support.
+Key notes: Pydantic v2 is used for schemas; Redis lifecycle is managed via FastAPI lifespan and injected into routes with `Depends(get_redis)`.
 
 ---
 
-## 🚀 Microservice Deployment
+## 🚀 Deployment & Local Development
 
 ### Quick Start with Docker Compose
 
 ```bash
-# Start the service (includes Ollama)
+# Start the stack (Redis + Ollama + browser-agent)
 docker-compose up -d
 
-# Check status
+# Health check
 curl http://localhost:8000/health
 
-# View logs
+# View service logs
 docker-compose logs -f browser-agent
 ```
 
-### Manual Docker Build
+### Local Development (venv)
 
 ```bash
-# Build image
-docker build -t browser-agent-service .
+# Create and activate venv
+python -m venv venv
+source venv/Scripts/activate  # Windows PowerShell: .\venv\Scripts\Activate.ps1
 
-# Run container
-docker run -d -p 8000:8000 \
-  -e OLLAMA_URL=http://localhost:11434 \
-  browser-agent-service
-```
-
-### Local Development
-
-```bash
-# Install dependencies
+# Install deps
 pip install -r requirements.txt
 playwright install chromium
 
 # Run the service
-python service.py
-
-# Or with uvicorn
-uvicorn service:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ---
 
-## 📡 API Usage
+## 📡 API Overview
 
-### Endpoint: `POST /browser_agent`
+Endpoints:
+- `POST /tasks` (async) — schedule a browser task; returns `task_id` immediately if `webhook_url` provided
+- `GET /tasks/{task_id}` — poll task status and result
+- `DELETE /tasks/{task_id}` — remove a task
+- `GET /health` — service health and configuration
+- `GET /docs` — OpenAPI docs (Swagger UI)
 
-**Synchronous Mode** (immediate response):
+Example async request:
+
 ```bash
-curl -X POST http://localhost:8000/browser_agent \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://example.com",
-    "task": "Find the main heading and describe the page"
-  }'
-```
-
-Response:
-```json
-{
-  "result": [
-    {
-      "url": "https://example.com",
-      "title": "Example Domain",
-      "task": "Find the main heading and describe the page",
-      "result": "The main heading is 'Example Domain'. This is a simple demonstration page...",
-      "status": "completed"
-    }
-  ],
-  "status": "completed"
-}
-```
-
-**Asynchronous Mode** (webhook callback):
-```bash
-curl -X POST http://localhost:8000/browser_agent \
+curl -X POST http://localhost:8000/tasks \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://example.com",
@@ -111,6 +91,7 @@ curl -X POST http://localhost:8000/browser_agent \
 ```
 
 Immediate response:
+
 ```json
 {
   "result": [],
@@ -119,83 +100,20 @@ Immediate response:
 }
 ```
 
-When complete, POSTs to your webhook:
-```json
-{
-  "task_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "completed",
-  "result": [{ ... }]
-}
-```
-
-### Check Task Status
-
-```bash
-curl http://localhost:8000/task/550e8400-e29b-41d4-a716-446655440000
-```
-
-### Interactive API Documentation
-
-Visit http://localhost:8000/docs for Swagger UI
+When complete the service posts the result to the `webhook_url` you provided.
 
 ---
-
-## 💻 CLI Usage
-
-```bash
-# Watch the browser work (not headless)
-python run.py --url "https://golfnow.com"
-
-# Run invisibly  
-python run.py --url "https://golfnow.com" --headless
-
-# Save results to JSON
-python run.py --url "https://example.com" --output results.json
-```
 
 ## 🔧 Configuration
 
-Environment variables:
-- `OLLAMA_URL`: Ollama API endpoint (default: `http://localhost:11434`)
-- `MODEL`: LLM model to use (default: `qwen3:8b`)
-- `HEADLESS`: Run browser headlessly (default: `True`)
+Environment variables (config.py reads these):
+- `OLLAMA_URL` (default: `http://localhost:11434`)
+- `MODEL` (default LLM model)
+- `HEADLESS` (browser headless mode)
+- `REDIS_URL` (e.g. `redis://redis:6379/0` in docker-compose)
+
 ---
 
-## 📋 Example Output
+## Notes & Development Tips
 
-```
-🤖 BROWSER AGENT - Describe What You See
-======================================================================
-
-🌐 Opening: https://golfnow.com
-📄 Page Title: GolfNow - Book Tee Times
-📝 Content Preview: GolfNow helps you find and book tee times...
-
-🧠 Asking LLM...
-
-💭 LLM Description:
-   This is a golf course booking website. The main sections 
-   include a search box to find courses, featured courses,
-   and tee time availability. Users can search for courses,
-   view prices, and book tee times directly.
-
-======================================================================
-📊 RESULTS
-======================================================================
-URL: https://golfnow.com
-Title: GolfNow - Book Tee Times
-
-Description:
-This is a golf course booking website...
-
-✅ Done!
-```
-
-## Roadmap
-
-- ✅ Open URL and describe (DONE)
-- ⬜ Find specific elements
-- ⬜ Click links
-- ⬜ Fill forms
-- ⬜ Extract data
-- ⬜ Multi-step navigation
+- On Windows, Playwright subprocesses require special handling — this project uses a thread-pool workaround for compatibility.
