@@ -17,14 +17,16 @@ async def create_tasks_endpoint(
     url = request.url
     task = request.task
     webhook_url = request.webhook_url
+    response_schema = request.response_schema
 
-    task_id = await TaskManager.create_task(redis, url=url, task=task, webhook_url=webhook_url)
+    task_id = await TaskManager.create_task(redis, url=url, task=task, webhook_url=webhook_url, response_schema=response_schema)
 
     background_tasks.add_task(
         TaskManager.execute_task,
         redis,
         url,
         task,
+        response_schema,
         task_id,
         webhook_url,
     )

@@ -20,6 +20,10 @@ class BrowserAgentRequest(BaseModel):
     url: str = Field(..., description="URL to visit")
     task: str = Field(..., description="Description of what to do")
     webhook_url: Optional[str] = Field(None, description="Optional webhook URL for async execution")
+    response_schema: Dict[str, Any] = Field(
+        ...,
+        description="JSON-like schema describing desired response shape"
+    )
 
 
 class BrowserAgentResponse(BaseModel):

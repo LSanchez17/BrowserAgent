@@ -3,6 +3,7 @@ Simple browser agent that opens a URL and interacts with it using a combination 
 """
 import asyncio
 import ollama
+import json
 
 from typing import Optional, Dict, Any
 from playwright.async_api import async_playwright, Page, Browser
@@ -48,28 +49,32 @@ class BrowserAgent:
         if hasattr(self, 'playwright'):
             await self.playwright.stop()
     
-    async def ask_llm(self, prompt: str) -> str:
+    async def ask_llm(self, prompt: str, response_schema: Dict[str, Any]) -> Any:
         """Ask LLM a question.
         
         Args:
             prompt: Question for the LLM
-            
+            response_schema: Optional schema to request structured output from the model
+
         Returns:
-            LLM response
+            LLM response in structured format if response_schema is provided, otherwise raw text
         """
         print(f"\n🧠 Asking LLM...")
         try:
             response = await self.client.generate(
                 model=self.model,
                 prompt=prompt,
-                stream=False
+                stream=False,
+                format=response_schema,
             )
-            answer = response['response'].strip()
-            return answer
+            answer = response.get('response')
+
+            return json.loads(answer)
         except Exception as e:
             print(f"❌ LLM Error: {e}")
             return ""
     
+    # This runs only during the manual run.py. Used for quick testing and debugging of the agent's capabilities.
     async def describe_page(self, url: str) -> Dict[str, Any]:
         """Open a URL and describe what's on the page.
         
@@ -84,7 +89,7 @@ class BrowserAgent:
         # Navigate to URL
         await self.page.goto(url, timeout=30000)
         await self.page.wait_for_load_state("networkidle")
-        await asyncio.sleep(1)
+        await asyncio.sleep(5)
         
         # Get page info
         title = await self.page.title()
@@ -107,8 +112,15 @@ class BrowserAgent:
             2. What are the main elements or sections?
             3. What actions can a user take here?
         """
-
-        description = await self.ask_llm(prompt)
+        debug_schema = {
+            "type": "object",
+            "properties": {
+                "description": {"type": "string"}
+            },
+            "required": ["description"]
+        }
+        
+        description = await self.ask_llm(prompt, response_schema=debug_schema)
         
         print(f"\n💭 LLM Description:")
         print(f"   {description}")
@@ -120,7 +132,7 @@ class BrowserAgent:
             'text_preview': text_preview[:500]
         }
     
-    async def execute_task(self, url: str, task: str) -> Dict[str, Any]:
+    async def execute_task(self, url: str, task: str, response_schema: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a task on a webpage.
         
         Args:
@@ -131,39 +143,30 @@ class BrowserAgent:
             Dict with task results, URL, title, and execution details
         """
         print(f"\n🌐 Opening: {url}")
-        print(f"📋 Task: {task}")
+        # Get page info - Mainly for debugging purposes
         
         # Navigate to URL
         await self.page.goto(url, timeout=30000)
         await self.page.wait_for_load_state("networkidle")
-        await asyncio.sleep(1)
+        await asyncio.sleep(3)
         
-        # Get page info
+        # Get page info-Mainly for debugging purposes
         title = await self.page.title()
         text = await self.page.evaluate('() => document.body.innerText')
         text_preview = text[:2000] if text else ""
         
         print(f"📄 Page Title: {title}")
         
-        # Ask LLM to execute the task
+        # Simple prompt to task the LLM to accomplish a task. Response schema is passed to ensure structured output that can be easily parsed and used by other systems.
         prompt = f"""You are a browser automation assistant. A user wants you to perform a task on a webpage.
+                    Page Title: {title}
+                    URL: {url}
+                    Page Content:
+                    {text_preview}
+                    User's Task: {task}
+                    Use the page content to complete the task."""
 
-Page Title: {title}
-URL: {url}
-
-Page Content:
-{text_preview}
-
-User's Task: {task}
-
-Based on the page content above, provide:
-1. What you observe on the page that's relevant to the task
-2. What actions would be needed to complete this task
-3. Any data or results from analyzing the page content
-
-Respond in a clear, structured way."""
-
-        result = await self.ask_llm(prompt)
+        result = await self.ask_llm(prompt, response_schema=response_schema)
         
         print(f"\n💭 Task Result:")
         print(f"   {result}")

@@ -17,20 +17,20 @@ _executor = ThreadPoolExecutor(max_workers=4)
 # Task expiration in seconds (1 hour by default)
 TASK_TTL = 3600
 
-def _run_browser_task_sync(url: str, task: str) -> Dict[str, Any]:
+def _run_browser_task_sync(url: str, task: str, response_schema: Dict[str, Any]) -> Dict[str, Any]:
     """
     Synchronous wrapper to run browser task in a new event loop.
     This allows Playwright to work on Windows by running in a separate thread.
     """
     import sys
-    
+
+    # On Windows, set the ProactorEventLoop policy before creating the loop
+    if sys.platform == 'win32':
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
     # Create new event loop for this thread
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    
-    # Set Windows policy if needed
-    if sys.platform == 'win32':
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
     
     try:
         async def _execute():
@@ -39,7 +39,7 @@ def _run_browser_task_sync(url: str, task: str) -> Dict[str, Any]:
                 model=settings.MODEL,
                 headless=settings.HEADLESS
             ) as agent:
-                return await agent.execute_task(url, task)
+                return await agent.execute_task(url, task, response_schema=response_schema)
         
         # Run the async task in this thread's event loop
         result = loop.run_until_complete(_execute())
@@ -56,14 +56,16 @@ class TaskManager:
         redis: Redis,
         url: str,
         task: str,
+        response_schema: Dict[str, Any],
         task_id: Optional[str] = None,
-        webhook_url: Optional[str] = None
+        webhook_url: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Execute a browser automation task.
         
         Args:
             redis: Redis client
             url: URL to visit
+            response_schema: Schema for structured LLM response
             task: Task description
             task_id: Optional task ID for tracking
             webhook_url: Optional webhook URL to POST results to
@@ -90,14 +92,16 @@ class TaskManager:
                 _executor,
                 _run_browser_task_sync,
                 url,
-                task
+                task,
+                response_schema,
             )
             
             # Update task status to completed
             task_data = {
                 "status": "completed",
                 "result": [result],
-                "completed_at": datetime.now(timezone.utc).isoformat()
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "response_schema": response_schema,
             }
             await redis.setex(f"task:{task_id}", TASK_TTL, json.dumps(task_data))
             
@@ -108,7 +112,8 @@ class TaskManager:
                     {
                         "task_id": task_id,
                         "status": "completed",
-                        "result": [result]
+                        "result": [result],
+                        "response_schema": response_schema,
                     }
                 )
             
@@ -122,7 +127,8 @@ class TaskManager:
             task_data = {
                 "status": "failed",
                 "error": error,
-                "completed_at": datetime.now(timezone.utc).isoformat()
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "response_schema": response_schema,
             }
             await redis.setex(f"task:{task_id}", TASK_TTL, json.dumps(task_data))
             
@@ -133,7 +139,8 @@ class TaskManager:
                     {
                         "task_id": task_id,
                         "status": "failed",
-                        "error": error
+                        "error": error,
+                        "response_schema": response_schema,
                     }
                 )
             
@@ -155,7 +162,7 @@ class TaskManager:
             print(f"⚠️  Webhook failed: {e}")
     
     @staticmethod
-    async def create_task(redis: Redis, url: str, task: str, webhook_url: str) -> str:
+    async def create_task(redis: Redis, url: str, task: str, webhook_url: str, response_schema: Dict[str, Any]) -> str:
         """Create a new task and return task ID.
         
         Args:
@@ -163,6 +170,7 @@ class TaskManager:
             url: URL to visit
             task: Task description
             webhook_url: Webhook URL for results
+            response_schema: Response schema for the task
             
         Returns:
             Task ID
@@ -174,7 +182,8 @@ class TaskManager:
             "created_at": datetime.now(timezone.utc).isoformat(),
             "url": url,
             "task": task,
-            "webhook_url": webhook_url
+            "webhook_url": webhook_url,
+            "response_schema": response_schema
         }
         await redis.setex(f"task:{task_id}", TASK_TTL, json.dumps(task_data))
 
