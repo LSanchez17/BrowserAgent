@@ -2,9 +2,13 @@ import uuid
 import httpx
 import asyncio
 import json
+import sys
+
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
+from agent.llm_client import LLMClient
+from agent.playwright_client import PlaywrightClient
 from redis.asyncio import Redis
 
 from agent.browser_agent import BrowserAgent
@@ -17,13 +21,16 @@ _executor = ThreadPoolExecutor(max_workers=4)
 # Task expiration in seconds (1 hour by default)
 TASK_TTL = 3600
 
-def _run_browser_task_sync(url: str, task: str, response_schema: Dict[str, Any]) -> Dict[str, Any]:
+def _run_browser_task_sync(url: str, task: str, response_schema: Dict[str, Any], configuration: Dict[str, Any]) -> Dict[str, Any]:
     """
     Synchronous wrapper to run browser task in a new event loop.
     This allows Playwright to work on Windows by running in a separate thread.
+    Args:
+        url: URL to visit
+        task: Task description
+        response_schema: Schema for LLM response
+        configuration: Additional configuration for the browser agent's LLM and playwright clients
     """
-    import sys
-
     # On Windows, set the ProactorEventLoop policy before creating the loop
     if sys.platform == 'win32':
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -35,9 +42,8 @@ def _run_browser_task_sync(url: str, task: str, response_schema: Dict[str, Any])
     try:
         async def _execute():
             async with BrowserAgent(
-                ollama_url=settings.OLLAMA_URL,
-                model=settings.MODEL,
-                headless=settings.HEADLESS
+                llm_client=LLMClient(host=settings.OLLAMA_URL, model=settings.MODEL),
+                playwright_client=PlaywrightClient(headless=settings.HEADLESS)
             ) as agent:
                 return await agent.execute_task(url, task, response_schema=response_schema)
         

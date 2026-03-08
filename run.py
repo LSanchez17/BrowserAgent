@@ -17,7 +17,7 @@ async def main():
     )
     parser.add_argument(
         '--headless',
-        action='store_true',
+        default=False,
         help='Run browser in headless mode (invisible)'
     )
     parser.add_argument(
@@ -45,14 +45,10 @@ async def main():
     print("=" * 70)
     
     # Create and run browser agent
-    async with BrowserAgent(
-        ollama_url=args.ollama_url,
-        model=args.model,
-        headless=args.headless
-    ) as agent:
+    async with BrowserAgent() as agent:
         
         # Describe the page
-        result = await agent.describe_page(args.url)
+        result = await agent.debug_run(args.url)
         
         # Print results
         print("\n" + "=" * 70)
