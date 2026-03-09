@@ -6,7 +6,8 @@ and fetch rendered page content.
 from typing import List, Optional, Dict, Any
 from playwright.async_api import async_playwright, Browser
 
-
+# TODO: Wire this up to playwright_tool
+# TODO: Expose this page so tools can use it for multi-step interactions without needing to re-fetch content each time
 class PlaywrightClient:
     def __init__(self, headless: bool = True):
         self.headless = headless
@@ -48,7 +49,7 @@ class PlaywrightClient:
         await page.close()
         print(f"\n✅ Closing browser, found: {title}")
         return {"url": page.url, "title": title, "html": html}
-    # TODO: Can we use this as a tool execution call? Maybe have a playwright tool that has arguments deciding which method to call, hmm
+
     async def new_page(self):
         """Create and return a new Playwright Page with sane defaults."""
         page = await self.browser.new_page()
@@ -101,3 +102,23 @@ class PlaywrightClient:
             return {"status": "ok", "selector": selector}
         except Exception as e:
             return {"status": "error", "selector": selector, "error": str(e)}
+
+    async def perform(self, page, action: str, **kwargs) -> Dict[str, Any]:
+        """Dispatch helper to call page_* methods based on an action string.
+
+        Supported actions: goto, click, fill, query, get_content, wait_for_selector
+        """
+        mapping = {
+            "goto": self.page_goto,
+            "click": self.page_click,
+            "fill": self.page_fill,
+            "query": self.page_query,
+            "get_content": self.page_get_content,
+            "wait_for_selector": self.page_wait_for_selector,
+        }
+
+        if action not in mapping:
+            return {"status": "error", "error": f"Unsupported action: {action}"}
+
+        fn = mapping[action]
+        return await fn(page, **kwargs)

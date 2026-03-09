@@ -61,16 +61,20 @@ class LLMClient:
         tool_args = getattr(call.function, 'arguments', {})
         print(f"\n🔧 Executing tool: {tool_name} with args: {tool_args}")
 
+        # Verify tool exists in registry
         if tool_name not in self.tools:
             raise ValueError(f"Tool {tool_name} not found in registry.")
+
+        # Default `requires_page` to True when a page object is provided
+        if page is not None:
+            tool_args.setdefault("requires_page", True)
+
+        # Execute the tool
+        tool_callable = self.tools[tool_name].execute
+        result = tool_callable(**tool_args)
         
-        if "requires_page" in tool_args and tool_args["requires_page"]:
-            # Inject the persistent page into tool calls that require it
-            tool_args["page"] = page  
-            result = await self.tools[tool_name].execute(**tool_args)
+        # If the result is a coroutine (async), await it before returning
+        if asyncio.iscoroutine(result):
+            result = await result
 
-            return tool_name, result
-        else:
-            result = await self.tools[tool_name].execute(**tool_args)
-
-            return tool_name, result
+        return tool_name, result
