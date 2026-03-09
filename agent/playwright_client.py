@@ -48,3 +48,56 @@ class PlaywrightClient:
         await page.close()
         print(f"\n✅ Closing browser, found: {title}")
         return {"url": page.url, "title": title, "html": html}
+    # TODO: Can we use this as a tool execution call? Maybe have a playwright tool that has arguments deciding which method to call, hmm
+    async def new_page(self):
+        """Create and return a new Playwright Page with sane defaults."""
+        page = await self.browser.new_page()
+        await page.set_viewport_size({"width": 1920, "height": 1080})
+        return page
+
+    async def close_page(self, page) -> None:
+        try:
+            await page.close()
+        except Exception:
+            pass
+
+    async def page_goto(self, page, url: str, timeout: int = 30000) -> None:
+        await page.goto(url, timeout=timeout)
+        await page.wait_for_load_state("networkidle", timeout=timeout)
+
+    async def page_get_content(self, page) -> Dict[str, Any]:
+        title = await page.title()
+        html = await page.content()
+        return {"url": page.url, "title": title, "html": html}
+
+    async def page_click(self, page, selector: str, timeout: int = 10000) -> Dict[str, Any]:
+        try:
+            await page.click(selector, timeout=timeout)
+            await page.wait_for_load_state("networkidle", timeout=timeout)
+            return {"status": "ok", "action": "click", "selector": selector}
+        except Exception as e:
+            return {"status": "error", "action": "click", "selector": selector, "error": str(e)}
+
+    async def page_fill(self, page, selector: str, value: str, timeout: int = 10000) -> Dict[str, Any]:
+        try:
+            await page.fill(selector, value, timeout=timeout)
+            return {"status": "ok", "action": "fill", "selector": selector}
+        except Exception as e:
+            return {"status": "error", "action": "fill", "selector": selector, "error": str(e)}
+
+    async def page_query(self, page, selector: str) -> Dict[str, Any]:
+        try:
+            handle = await page.query_selector(selector)
+            if not handle:
+                return {"found": False, "selector": selector}
+            text = await handle.inner_text()
+            return {"found": True, "selector": selector, "text": text}
+        except Exception as e:
+            return {"found": False, "selector": selector, "error": str(e)}
+
+    async def page_wait_for_selector(self, page, selector: str, timeout: int = 10000) -> Dict[str, Any]:
+        try:
+            await page.wait_for_selector(selector, timeout=timeout)
+            return {"status": "ok", "selector": selector}
+        except Exception as e:
+            return {"status": "error", "selector": selector, "error": str(e)}

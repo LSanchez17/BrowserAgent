@@ -55,47 +55,82 @@ class BrowserAgent:
     
     # For debugging and incremental development; avoid full microservice running
     async def debug_run(self, url: str) -> Dict[str, Any]:
-        # Fetch rendered page using the Playwright client
-        page_info = await self.playwright_client.get_page_content(url)
-        title = page_info.get('title')
-        html = page_info.get('html')
-        page_url = page_info.get('url')
+        # Create a persistent page for interactive flows
+        page = await self.playwright_client.new_page()
 
-        # Clean HTML preview (remove scripts, styles, common clutter)
-        cleaned_html = clean_html(html)
-        html_preview = cleaned_html[:8000] if cleaned_html else ""
-        
-        print(f"📄 Page Title: {title}")
-        task = "figure out the hours of operation"
-        
-        # Debug prompt. Change to test new workflows
-        prompt = f"""You are looking at a webpage. Describe what you see in a clear, concise way.
-            Page Title: {title}
-            Page Content:
-            {html_preview}
-            Accomplish this task: {task}
-        """
-        # Change schema depending on task
-        debug_schema = {
-            "type": "object",
-            "properties": {
-                "description": {"type": "string"}
-            },
-            "required": ["description"]
-        }
-        
-        description = await self.ask_llm(prompt, response_schema=debug_schema)
-        
-        print(f"\n💭 LLM Description:")
-        print(f"   {description}")
-        
-        return {
-            'initial_url': url,
-            'url': page_url,
-            'title': title,
-            'description': description,
-            'html_preview': html_preview[:500]
-        }
+        try:
+            await self.playwright_client.page_goto(page, url)
+
+            # Initial fetch of page content
+            page_info = await self.playwright_client.page_get_content(page)
+            title = page_info.get('title')
+            html = page_info.get('html')
+            page_url = page_info.get('url')
+
+            # Clean HTML preview (remove scripts, styles, common clutter)
+            cleaned_html = clean_html(html)
+            html_preview = cleaned_html[:8000] if cleaned_html else ""
+
+            print(f"📄 Page Title: {title}")
+            debug_task = "Click the hours of operation (or something similar) so we can then extract information"
+            # Initial prompt
+            base_prompt = f"You are looking at a webpage. Use the provided page content to complete the task.\nPage Title: {title}\nUser Task: {debug_task}\n"
+            prompt_suffix = f"Page Content:\n{html_preview}\nAccomplish this task: {debug_task}\n"
+            prompt = base_prompt + prompt_suffix
+
+            messages = [
+                {
+                    "role": "system", 
+                    "content": (
+                        "You are a helpful autonomous browser assistant. " 
+                        "Your main goal is to accomplish the user's request. "
+                        "You have a list of tools you can use to interact with the page and extract information. "
+                        "Use them wisely to complete the task. You are primarily using playwright"
+                    ),
+                },
+                {
+                    "role": "user", 
+                    "content": prompt
+                }
+            ]
+
+            # Naive, find a more robust pattern
+            max_iterations = 5
+
+            for _ in range(max_iterations):
+                print(f"\n💬 Looping and Sending messages to LLM: ")
+                resp = await self.llm_client.chat(messages=messages)
+                tool_calls = getattr(resp.message, 'tool_calls', [])
+
+                if not tool_calls:
+                    print(f"\n💬 Final LLM Response:\n{resp}")
+
+                    await self.playwright_client.close_page(page)
+
+                    # We want to adapt this to match the original expected return as well
+                    return {
+                        "response": resp,
+                        "messages": messages,
+                    }
+                
+                for call in tool_calls:
+                    tool_name, tool_response = await self.llm_client.execute_tool_call(call, page)
+
+                    # Append the tool response to the messages for the next LLM turn
+                    messages.append({"role": "tool", "name": tool_name, "content": str(tool_response)})
+
+            await self.playwright_client.close_page(page)
+
+            return {
+                "error": f"Max iterations ({max_iterations}) reached before completion",
+                "messages": messages,
+                "initial_url": url,
+                "url": page_url,
+                "title": title,
+                "description": debug_task,
+            }
+        finally:
+            await self.playwright_client.close_page(page)
     
     async def execute_task(self, url: str, task: str, response_schema: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a task on a webpage.

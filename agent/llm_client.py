@@ -6,12 +6,17 @@ attempt JSON parsing when a schema is provided.
 from typing import Any, Dict, Optional
 import json
 import ollama
+import asyncio
+
+from .functions.tool_registry import ToolsRegistry
 
 
 class LLMClient:
     def __init__(self, host: str = "http://localhost:11434", model: str = "qwen3:8b"):
         self.host = host
         self.model = model
+        self.tools_schemas = ToolsRegistry().as_function_schemas()
+        self.tools = ToolsRegistry().tools
         self.client = ollama.AsyncClient(host=host)
 
     async def evaluate(self, prompt: str, schema: Dict[str, Any], timeout: Optional[int] = None) -> Any:
@@ -27,3 +32,42 @@ class LLMClient:
             return json.loads(answer)
         except Exception as e:
             raise e
+
+    async def chat(self, messages: list):
+        """Call Ollama chat API with tools if available.
+
+        Returns the raw response from the Ollama client. This wrapper will use
+        the async client's `chat` if present, otherwise fall back to running
+        the sync `ollama.chat` in a thread.
+        """
+        try:
+            print(f"\n🧠 Asking LLM (chat)...")
+            if hasattr(self.client, "chat"):
+                resp = await self.client.chat(model=self.model, messages=messages, tools=self.tools_schemas)
+                return resp
+
+            # Fallback to synchronous call in a thread
+            def _sync_call():
+                return ollama.chat(model=self.model, messages=messages, tools=self.tools_schemas, think=True)
+
+            resp = await asyncio.to_thread(_sync_call)
+            return resp
+        except Exception as e:
+            raise
+
+    async def execute_tool_call(self, call, page):
+        """Execute a registered tool by name with the provided arguments."""
+        tool_name = getattr(call.function, 'name')
+        tool_args = getattr(call.function, 'arguments', {})
+        
+        print(f"\n🔧 Executing tool: {tool_name} with args: {tool_args}")
+        
+        if "requires_page" in tool_args and tool_args["requires_page"]:
+            # Inject the persistent page into tool calls that require it
+            tool_args["page"] = page  
+        
+            result = await self.tools[tool_name].execute(**tool_args)
+
+            return tool_name, result
+        else:
+            raise ValueError(f"Tool {tool_name} not found in registry.")
