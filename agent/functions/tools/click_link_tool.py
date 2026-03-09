@@ -21,8 +21,9 @@ class PageClickTool(BaseTool):
                 "selector": {
                     "type": "string",
                     "description": "A CSS selector string to identify the element to click on the page. Prefer using unique identifiers like IDs or specific class names to avoid ambiguity. Example: '#submit-button' or '.nav-link'."
-                }
+                },
             },
+            "required": ["selector", "requires_page"]
         }
 
     async def execute(self, page, selector: str, requires_page: bool) -> Dict[str, Any]:

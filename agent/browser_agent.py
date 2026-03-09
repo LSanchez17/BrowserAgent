@@ -111,6 +111,14 @@ class BrowserAgent:
                     return {
                         "response": resp,
                         "messages": messages,
+                        'initial_url': url,
+                        'url': page_url,
+                        'title': title,
+                        'task': debug_task,
+                        'result': resp,
+                        'html_preview': html_preview[:500],
+                        'status': 'completed',
+                        'description': prompt
                     }
                 
                 for call in tool_calls:
@@ -122,9 +130,9 @@ class BrowserAgent:
             await self.playwright_client.close_page(page)
 
             return {
+                "initial_url": url,
                 "error": f"Max iterations ({max_iterations}) reached before completion",
                 "messages": messages,
-                "initial_url": url,
                 "url": page_url,
                 "title": title,
                 "description": debug_task,

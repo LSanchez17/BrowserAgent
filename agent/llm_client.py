@@ -59,15 +59,18 @@ class LLMClient:
         """Execute a registered tool by name with the provided arguments."""
         tool_name = getattr(call.function, 'name')
         tool_args = getattr(call.function, 'arguments', {})
-        
         print(f"\n🔧 Executing tool: {tool_name} with args: {tool_args}")
+
+        if tool_name not in self.tools:
+            raise ValueError(f"Tool {tool_name} not found in registry.")
         
         if "requires_page" in tool_args and tool_args["requires_page"]:
             # Inject the persistent page into tool calls that require it
             tool_args["page"] = page  
-        
             result = await self.tools[tool_name].execute(**tool_args)
 
             return tool_name, result
         else:
-            raise ValueError(f"Tool {tool_name} not found in registry.")
+            result = await self.tools[tool_name].execute(**tool_args)
+
+            return tool_name, result
