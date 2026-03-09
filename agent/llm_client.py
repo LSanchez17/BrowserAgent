@@ -12,7 +12,7 @@ from .functions.tool_registry import ToolsRegistry
 
 
 class LLMClient:
-    def __init__(self, host: str = "http://localhost:11434", model: str = "qwen3:8b"):
+    def __init__(self, host: str = "http://localhost:11434", model: str = "qwen3.5:9b"):
         self.host = host
         self.model = model
         self.tools_schemas = ToolsRegistry().as_function_schemas()

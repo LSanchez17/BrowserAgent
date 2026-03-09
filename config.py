@@ -6,7 +6,7 @@ class Settings:
     
     # Ollama Configuration
     OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://localhost:11434")
-    MODEL: str = os.getenv("MODEL", "qwen3:8b")
+    MODEL: str = os.getenv("MODEL", "qwen3.5:9b")
     
     # Browser Configuration
     HEADLESS: bool = os.getenv("HEADLESS", "True").lower() == "true"

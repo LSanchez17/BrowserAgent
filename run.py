@@ -23,8 +23,8 @@ async def main():
     parser.add_argument(
         '--model',
         type=str,
-        default='qwen3:8b',
-        help='Ollama model to use (default: qwen3:8b)'
+        default='qwen3.5:9b',
+        help='Ollama model to use (default: qwen3.5:9b)'
     )
     parser.add_argument(
         '--ollama-url',
