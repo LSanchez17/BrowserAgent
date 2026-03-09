@@ -6,23 +6,40 @@ A lightweight, LLM-powered browser agent now implemented as a FastAPI microservi
 
 ```
 BrowserAgent/
-├── main.py                   # FastAPI application (endpoints + lifespan)
-├── run.py                    # CLI entry point (legacy/CLI)
-├── config.py                 # Settings
+├── main.py
+├── run.py
+├── config.py
 ├── requirements.txt
 ├── Dockerfile
 ├── docker-compose.yml
-├── dependencies.py           # App dependencies (Redis lifecycle)
 ├── agent/
-│   └── browser_agent.py      # Browser automation core
-├── services/
-│   └── task_manager.py       # Business logic and task persistence
+│   ├── __init__.py
+│   ├── browser_agent.py
+│   ├── html_utils.py
+│   ├── llm_client.py
+│   ├── playwright_client.py
+│   └── TODO.md
+├── functions/
+│   ├── base_tool.py
+│   ├── tool_registry.py
+│   └── tools/
+│       ├── __init__.py
+│       └── click_link_tool.py
+├── dependencies/
+│   ├── __init__.py
+│   └── dependencies.py
 ├── routes/
-│   └── tasks_controller.py   # Task-related routes (moved from main)
+│   ├── __init__.py
+│   └── tasks_controller.py
 ├── schemas/
-│   └── schemas.py            # Pydantic v2 request/response models
+│   ├── __init__.py
+│   └── schemas.py
+├── services/
+│   ├── __init__.py
+│   └── task_manager.py
 ├── aliases/
-│   └── global_aliases.py     # Common dependency aliases
+│   ├── __init__.py
+│   └── global_aliases.py
 └── README.md
 ```
 
@@ -33,7 +50,7 @@ BrowserAgent/
 3. Returns structured results synchronously or via webhook (async)
 4. Persists task state in Redis with a TTL for asynchronous tasks
 
-Key notes: Pydantic v2 is used for schemas; Redis lifecycle is managed via FastAPI lifespan and injected into routes with `Depends(get_redis)`.
+Key notes: Pydantic v2 is used for schemas; Redis lifecycle is managed via FastAPI lifespan. Application dependencies live under the `dependencies/` package and are injected into routes with `Depends(get_redis)`. Tooling and custom tools are placed under the `functions/` package.
 
 ---
 
